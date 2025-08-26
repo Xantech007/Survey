@@ -1,73 +1,62 @@
-<style>
-    .message {
-        margin: 20rem auto;
-        width: 20rem;
-        font-size: 1.4rem;
-        padding: 0.5rem 0;
-        text-align: center;
-        border-radius: 0.4rem;
-    }
-
-    .error {
-        border: 2px solid #cc3434;
-        color: #cc3434;
-    }
-
-    .success {
-        border: 2px solid #45cc45;
-        color: #45cc45;
-    }
-</style>
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ob_start();
 
 include "db.inc.php";
 include "validation.inc.php";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-
-    if (isset(($_POST["firstname"])) && isset($_POST["lastname"]) && isset($_POST["email"]) && isset($_POST["password"])) {
-
+    if (isset($_POST["firstname"]) && isset($_POST["lastname"]) && isset($_POST["email"]) && isset($_POST["password"]) && isset($_POST["confirm"])) {
         $fname = setup_input($_POST["firstname"]);
         $lname = setup_input($_POST["lastname"]);
         $email = setup_input($_POST["email"]);
-        $password = md5(setup_input($_POST["password"]));
+        $password = $_POST["password"];
+        $confirm = $_POST["confirm"];
 
-        if (isUsed("email", $email, "user")) {
-?>
-            <div class="message error">Email already in use</div>
-            <?php
-        } else {
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                // $emailErr = "Invalid email format";
-                header("Location: ../html/usersignup.php?logincheck=1");
-            }
-            $sql = "INSERT INTO user(u_firstname, u_lastname, u_email, u_password, u_age, u_occupation, u_gender, u_profit,taken_survey) VALUES ('" . $fname . "', '" . $lname . "', '" . $email . "', '" . $password . "', '', '','', '0', '0')";
-            if ($conn->query($sql) === TRUE) {
-                if (isset($_POST['deleting'])) {
-                    header("Location: ../html/admin.php?table=" . $_POST['deleting'] . "");
-                }
-                header("Location: ../html/login.php");
-
-            ?>
-                <!-- <div class="message success">Account created</div> -->
-<?php
-
-            } else {
-
-                echo "Error: " . $sql . "<br>" . $conn->error;
-            }
+        // Validate passwords match
+        if ($password !== $confirm) {
+            header("Location: ../html/usersignup.php?error=password_mismatch");
+            exit();
         }
+
+        // Validate email
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            header("Location: ../html/usersignup.php?error=invalid_email");
+            exit();
+        }
+
+        // Check if email is already used
+        if (isUsed("email", $email, "user")) {
+            echo '<div class="message error">Email already in use</div>';
+            exit();
+        }
+
+        // Hash password
+        $password = password_hash($password, PASSWORD_BCRYPT);
+
+        // Insert user with prepared statement
+        $stmt = $conn->prepare("INSERT INTO user (u_firstname, u_lastname, u_email, u_password, u_age, u_occupation, u_gender, u_profit, taken_survey) VALUES (?, ?, ?, ?, '', '', '', '0', '0')");
+        $stmt->bind_param("ssss", $fname, $lname, $email, $password);
+        if ($stmt->execute()) {
+            if (isset($_POST['deleting'])) {
+                header("Location: ../html/admin.php?table=" . $_POST['deleting']);
+            } else {
+                header("Location: ../html/login.php?signup=success");
+            }
+            exit();
+        } else {
+            echo "Error: " . $stmt->error;
+        }
+    }
+
+    if (isset($_POST["email"]) && isset($_POST["delete"])) {
+        $email = setup_input($_POST["email"]);
+        deleteutable('user', $email);
+        header("Location: ../html/admin.php");
+        exit();
     }
 }
 
-if (isset(($_POST["email"])) && isset($_POST["delete"])) {
-
-    $email = setup_input($_POST["email"]);
-
-    deleteutable('user', $email);
-    header("Location: ../html/admin.php");
-}
-
-
-
+ob_end_flush();
 ?>
